@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fuel Pricer - Comparateur de Prix Carburants</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        /* ========================================
+           VARIABLES CSS & RESET
+        ======================================== */
+        :root {
+            --bg-primary: #0f0f1a;
+            --bg-secondary: #1a1a2e;
+            --bg-card: #242438;
+            --bg-hover: #2d2d44;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --accent-primary: #6366f1;
+            --accent-secondary: #818cf8;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --border-color: #3d3d5c;
+            --sidebar-width: 400px;
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ========================================
+           LAYOUT PRINCIPAL
+        ======================================== */
+        .app-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* ========================================
+           SIDEBAR
+        ======================================== */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--bg-secondary);
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border-color);
+            z-index: 1000;
+        }
+
+        .sidebar-header {
+            padding: 24px;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .sidebar-header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .sidebar-header h1::before {
+            content: "⛽";
+            font-size: 1.3rem;
+        }
+
+        .sidebar-header p {
+            font-size: 0.85rem;
+            opacity: 0.9;
+        }
+
+        /* ========================================
+           CONTROLES (Sélecteur de carburant)
+        ======================================== */
+        .controls {
+            padding: 20px;
+            background-color: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .control-group {
+            margin-bottom: 0;
+        }
+
+        .control-group label {
+            display: block;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .fuel-select {
+            width: 100%;
+            padding: 12px 16px;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            cursor: pointer;
+            transition: var(--transition);
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23a0a0b0' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+        }
+
+        .fuel-select:hover {
+            border-color: var(--accent-primary);
+        }
+
+        .fuel-select:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+
+        /* ========================================
+           STATISTIQUES
+        ======================================== */
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            padding: 16px 20px;
+            background-color: var(--bg-primary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 12px 8px;
+            background-color: var(--bg-card);
+            border-radius: 8px;
+        }
+
+        .stat-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--accent-secondary);
+        }
+
+        .stat-value.lowest {
+            color: var(--success);
+        }
+
+        .stat-value.highest {
+            color: var(--danger);
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        /* ========================================
+           LISTE DES STATIONS
+        ======================================== */
+        .stations-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .stations-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .stations-list::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        .stations-list::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        .station-card {
+            background-color: var(--bg-card);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .station-card:hover {
+            background-color: var(--bg-hover);
+            transform: translateX(4px);
+            border-color: var(--accent-primary);
+        }
+
+        .station-card.top-cheap {
+            border-left: 4px solid var(--success);
+        }
+
+        .station-card.top-cheap::before {
+            content: "🏆";
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            font-size: 1rem;
+        }
+
+        .station-card.expensive {
+            border-left: 4px solid var(--danger);
+        }
+
+        .station-rank {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            background-color: var(--bg-secondary);
+            border-radius: 50%;
+            font-size: 0.8rem;
+            font-weight: 700;
+            margin-right: 12px;
+        }
+
+        .station-card.top-cheap .station-rank {
+            background-color: var(--success);
+            color: white;
+        }
+
+        .station-header {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .station-info {
+            flex: 1;
+        }
+
+        .station-name {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+            line-height: 1.3;
+        }
+
+        .station-address {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        .station-price {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-secondary);
+        }
+
+        .station-card.top-cheap .station-price {
+            color: var(--success);
+        }
+
+        .station-card.expensive .station-price {
+            color: var(--danger);
+        }
+
+        .price-unit {
+            font-size: 0.8rem;
+            font-weight: 400;
+            color: var(--text-secondary);
+        }
+
+        .station-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .station-distance {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .station-distance::before {
+            content: "📍";
+            font-size: 0.9rem;
+        }
+
+        .station-update {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .station-update.outdated {
+            color: var(--warning);
+        }
+
+        .outdated-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px;
+            background-color: rgba(245, 158, 11, 0.15);
+            border: 1px solid var(--warning);
+            border-radius: 12px;
+            font-size: 0.7rem;
+            color: var(--warning);
+            font-weight: 600;
+        }
+
+        .outdated-badge::before {
+            content: "⚠️";
+            font-size: 0.75rem;
+        }
+
+        .station-card.outdated-data {
+            opacity: 0.75;
+        }
+
+        .station-card.outdated-data .station-name::after {
+            content: "";
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: var(--warning);
+            border-radius: 50%;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        /* ========================================
+           ETATS (Chargement, Erreur, Vide)
+        ======================================== */
+        .loading-state,
+        .error-state,
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--bg-card);
+            border-top-color: var(--accent-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-state {
+            color: var(--danger);
+        }
+
+        .error-state .error-icon {
+            font-size: 2.5rem;
+            margin-bottom: 12px;
+        }
+
+        .retry-btn {
+            margin-top: 16px;
+            padding: 10px 20px;
+            background-color: var(--accent-primary);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .retry-btn:hover {
+            background-color: var(--accent-secondary);
+        }
+
+        /* ========================================
+           CARTE
+        ======================================== */
+        .map-container {
+            flex: 1;
+            position: relative;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Style des marqueurs personnalisés */
+        .custom-marker {
+            background-color: var(--bg-card);
+            border: 2px solid var(--accent-primary);
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            transition: var(--transition);
+        }
+
+        .custom-marker::after {
+            content: "";
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-top: 8px solid var(--accent-primary);
+        }
+
+        .custom-marker.cheap {
+            border-color: var(--success);
+            background-color: rgba(34, 197, 94, 0.15);
+        }
+
+        .custom-marker.cheap::after {
+            border-top-color: var(--success);
+        }
+
+        .custom-marker.expensive {
+            border-color: var(--danger);
+            background-color: rgba(239, 68, 68, 0.15);
+        }
+
+        .custom-marker.expensive::after {
+            border-top-color: var(--danger);
+        }
+
+        /* Popup Leaflet personnalisé */
+        .leaflet-popup-content-wrapper {
+            background-color: var(--bg-card);
+            color: var(--text-primary);
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        .leaflet-popup-tip {
+            background-color: var(--bg-card);
+        }
+
+        .leaflet-popup-content {
+            margin: 16px;
+        }
+
+        .popup-content h3 {
+            font-size: 1rem;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .popup-content p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .popup-content .popup-price {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--accent-secondary);
+            margin-top: 12px;
+        }
+
+        /* ========================================
+           RESPONSIVE
+        ======================================== */
+        @media (max-width: 768px) {
+            .app-container {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                height: 50vh;
+                order: 2;
+            }
+
+            .map-container {
+                height: 50vh;
+                order: 1;
+            }
+
+            .stats-bar {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 8px;
+                padding: 12px;
+            }
+
+            .stat-value {
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- ========================================
+             SIDEBAR: Contrôles et liste des stations
+        ======================================== -->
+        <aside class="sidebar">
+            <header class="sidebar-header">
+                <h1>Fuel Pricer</h1>
+                <p>Comparateur de prix - Île-de-France</p>
+            </header>
+
+            <!-- Sélecteur de type de carburant -->
+            <div class="controls">
+                <div class="control-group">
+                    <label for="fuel-type">Type de carburant</label>
+                    <select id="fuel-type" class="fuel-select">
+                        <option value="Gazole">Gazole</option>
+                        <option value="E10" selected>E10 (Sans Plomb 95-E10)</option>
+                        <option value="SP95">SP95 (Sans Plomb 95)</option>
+                        <option value="SP98">SP98 (Sans Plomb 98)</option>
+                        <option value="E85">E85 (Superéthanol)</option>
+                        <option value="GPLc">GPLc</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Barre de statistiques -->
+            <div class="stats-bar">
+                <div class="stat-item">
+                    <div class="stat-value lowest" id="stat-min">--</div>
+                    <div class="stat-label">Min €/L</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-avg">--</div>
+                    <div class="stat-label">Moy €/L</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value highest" id="stat-max">--</div>
+                    <div class="stat-label">Max €/L</div>
+                </div>
+            </div>
+
+            <!-- Liste des stations -->
+            <div class="stations-list" id="stations-list">
+                <div class="loading-state">
+                    <div class="loading-spinner"></div>
+                    <p>Chargement des stations...</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ========================================
+             CARTE INTERACTIVE
+        ======================================== -->
+        <main class="map-container">
+            <div id="map"></div>
+        </main>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        /**
+         * ========================================
+         * CONFIGURATION DE L'APPLICATION
+         * ========================================
+         */
+        const CONFIG = {
+            // Coordonnées de Créteil (centre de la carte)
+            center: {
+                lat: 48.7775,
+                lon: 2.4531
+            },
+            // Rayon de recherche en kilomètres
+            searchRadius: 5,
+            // Zoom par défaut de la carte
+            defaultZoom: 14,
+            // URL de base de l'API Open Data
+            apiBaseUrl: 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/prix-des-carburants-en-france-flux-instantane-v2/records',
+            // Nombre maximum de résultats
+            maxResults: 100
+        };
+
+        /**
+         * ========================================
+         * ÉTAT GLOBAL DE L'APPLICATION
+         * ========================================
+         */
+        let state = {
+            stations: [],           // Données brutes des stations
+            filteredStations: [],   // Stations filtrées par carburant
+            visibleStations: [],    // Stations visibles sur la carte
+            selectedFuel: 'E10',    // Carburant sélectionné
+            map: null,              // Instance de la carte Leaflet
+            markers: [],            // Marqueurs sur la carte
+            isLoading: false        // État de chargement
+        };
+
+        /**
+         * ========================================
+         * INITIALISATION DE LA CARTE LEAFLET
+         * ========================================
+         */
+        function initMap() {
+            // Création de la carte centrée sur Créteil
+            state.map = L.map('map', {
+                center: [CONFIG.center.lat, CONFIG.center.lon],
+                zoom: CONFIG.defaultZoom,
+                zoomControl: true
+            });
+
+            // Ajout des tuiles OpenStreetMap avec un style sombre
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 19
+            }).addTo(state.map);
+
+            // Ajout d'un cercle pour visualiser la zone de recherche (5km)
+            L.circle([CONFIG.center.lat, CONFIG.center.lon], {
+                color: '#6366f1',
+                fillColor: '#6366f1',
+                fillOpacity: 0.05,
+                radius: CONFIG.searchRadius * 1000, // Conversion en mètres
+                weight: 2,
+                dashArray: '10, 10'
+            }).addTo(state.map);
+
+            // Marqueur central pour Créteil
+            L.marker([CONFIG.center.lat, CONFIG.center.lon], {
+                icon: L.divIcon({
+                    className: 'center-marker',
+                    html: '<div style="background: #6366f1; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.4);"></div>',
+                    iconSize: [22, 22],
+                    iconAnchor: [11, 11]
+                })
+            }).addTo(state.map).bindPopup('<strong>Centre: Créteil</strong><br>94000');
+
+            // Listener pour mettre à jour la liste quand la carte bouge
+            state.map.on('moveend', updateVisibleStations);
+            state.map.on('zoomend', updateVisibleStations);
+        }
+
+        /**
+         * ========================================
+         * APPEL À L'API OPEN DATA
+         * ========================================
+         * 
+         * Cette fonction effectue une requête vers l'API du gouvernement
+         * pour récupérer les prix des carburants.
+         * 
+         * Points clés de l'API :
+         * - `within_distance` : Filtre géographique basé sur les coordonnées
+         * - `geom` : Champ géométrique contenant la position de la station
+         * - Les prix sont stockés dans des champs comme `gazole_prix`, `e10_prix`, etc.
+         */
+        async function fetchStations() {
+            state.isLoading = true;
+            updateUI();
+
+            try {
+                // Pagination : l'API est limitée à 100 résultats par requête
+                // On fait plusieurs requêtes pour récupérer toutes les stations d'Île-de-France (~857)
+                const allStations = [];
+                let offset = 0;
+                const limit = 100;
+                let hasMore = true;
+                
+                console.log('📡 Chargement des stations d\'Île-de-France...');
+
+                while (hasMore) {
+                    // Construction de l'URL avec filtre région IDF (code_region:11)
+                    // et pagination (offset)
+                    const url = `${CONFIG.apiBaseUrl}?limit=${limit}&offset=${offset}&refine=code_region%3A11`;
+                    
+                    console.log(`📡 Requête ${Math.floor(offset/limit) + 1}: offset=${offset}`);
+
+                    // Exécution de la requête HTTP avec fetch
+                    const response = await fetch(url);
+
+                    // Vérification du statut de la réponse
+                    if (!response.ok) {
+                        throw new Error(`Erreur HTTP: ${response.status} ${response.statusText}`);
+                    }
+
+                    // Parsing de la réponse JSON
+                    const data = await response.json();
+                    const results = data.results || [];
+                    
+                    // Ajout des résultats à la liste complète
+                    allStations.push(...results);
+                    
+                    // Vérifier s'il y a encore des données à charger
+                    if (results.length < limit) {
+                        hasMore = false;
+                    } else {
+                        offset += limit;
+                    }
+                    
+                    // Sécurité : limiter à 20 requêtes max (2000 stations)
+                    if (offset >= 2000) {
+                        hasMore = false;
+                    }
+                }
+                
+                console.log(`✅ ${allStations.length} stations récupérées au total`);
+
+                // Stockage des données
+                state.stations = allStations;
+                
+                // Filtrage initial par type de carburant
+                filterStationsByFuel();
+
+            } catch (error) {
+                console.error('❌ Erreur lors de la récupération des données:', error);
+                showError(error.message);
+            } finally {
+                state.isLoading = false;
+            }
+        }
+
+        /**
+         * ========================================
+         * FILTRAGE DES STATIONS PAR CARBURANT
+         * ========================================
+         * 
+         * Filtre les stations pour ne garder que celles qui proposent
+         * le carburant sélectionné, puis les trie du moins cher au plus cher.
+         */
+        function filterStationsByFuel() {
+            const fuelType = state.selectedFuel.toLowerCase();
+            const priceField = `${fuelType}_prix`;
+            const updateField = `${fuelType}_maj`;
+
+            // Filtrage : ne garder que les stations avec un prix pour ce carburant
+            state.filteredStations = state.stations
+                .filter(station => {
+                    const price = station[priceField];
+                    // Vérifier que le prix existe et est valide
+                    return price !== null && price !== undefined && price > 0;
+                })
+                .map(station => ({
+                    ...station,
+                    // Normalisation : ajout des champs de prix/date génériques
+                    currentPrice: station[priceField],
+                    lastUpdate: station[updateField]
+                }))
+                // Tri par prix croissant (du moins cher au plus cher)
+                .sort((a, b) => a.currentPrice - b.currentPrice);
+
+            console.log(`🔍 ${state.filteredStations.length} stations avec ${state.selectedFuel}`);
+
+            // Mise à jour de la carte d'abord
+            updateMap();
+            // Puis filtrer par vue et mettre à jour la liste
+            updateVisibleStations();
+            updateStats();
+        }
+
+        /**
+         * ========================================
+         * FILTRAGE PAR VUE CARTE
+         * ========================================
+         * 
+         * Filtre les stations pour ne garder que celles visibles
+         * dans la zone actuellement affichée sur la carte.
+         */
+        function updateVisibleStations() {
+            if (!state.map) return;
+            
+            // Récupérer les limites visibles de la carte
+            const bounds = state.map.getBounds();
+            
+            // Filtrer les stations dans ces limites
+            state.visibleStations = state.filteredStations.filter(station => {
+                if (!station.geom?.lat || !station.geom?.lon) return false;
+                return bounds.contains([station.geom.lat, station.geom.lon]);
+            });
+            
+            console.log(`🗺️ ${state.visibleStations.length} stations visibles sur la carte`);
+            
+            // Mettre à jour les couleurs des marqueurs selon le classement visible
+            updateMarkerColors();
+            
+            // Mise à jour de la liste
+            updateUI();
+            
+            // Mise à jour des stats basées sur les stations visibles
+            updateStats();
+        }
+
+        /**
+         * ========================================
+         * MISE À JOUR DES COULEURS DES MARQUEURS
+         * ========================================
+         * 
+         * Met à jour les couleurs des marqueurs en fonction du classement
+         * parmi les stations visibles sur la carte.
+         */
+        function updateMarkerColors() {
+            const totalVisible = state.visibleStations.length;
+            if (totalVisible === 0) return;
+            
+            // Créer un Set des IDs des stations visibles pour recherche rapide
+            const visibleIds = new Set(state.visibleStations.map(s => s.id));
+            
+            // Mettre à jour chaque marqueur
+            state.markers.forEach(({ marker, station }) => {
+                // Trouver le rang de cette station parmi les visibles
+                const visibleIndex = state.visibleStations.findIndex(s => s.id === station.id);
+                
+                // Déterminer la classe de couleur
+                let colorClass = 'custom-marker';
+                if (visibleIndex !== -1) {
+                    // Station visible
+                    if (visibleIndex < 3) {
+                        colorClass += ' cheap'; // Top 3 moins chers (vert)
+                    } else if (visibleIndex >= totalVisible - 3 && totalVisible > 6) {
+                        colorClass += ' expensive'; // Top 3 plus chers (rouge)
+                    } else if (visibleIndex < totalVisible * 0.3) {
+                        // Top 30% - pas de classe spéciale mais on pourrait ajouter 'medium-cheap'
+                    } else if (visibleIndex >= totalVisible * 0.7) {
+                        // Bottom 30% - on pourrait ajouter 'medium-expensive'
+                    }
+                }
+                
+                // Mettre à jour l'icône du marqueur
+                const newIcon = L.divIcon({
+                    className: '',
+                    html: `<div class="${colorClass}">${station.currentPrice.toFixed(3)}€</div>`,
+                    iconSize: [80, 40],
+                    iconAnchor: [40, 40]
+                });
+                
+                marker.setIcon(newIcon);
+            });
+        }
+
+        /**
+         * ========================================
+         * MISE À JOUR DE L'INTERFACE UTILISATEUR
+         * ========================================
+         */
+        function updateUI() {
+            const listContainer = document.getElementById('stations-list');
+
+            // État de chargement
+            if (state.isLoading) {
+                listContainer.innerHTML = `
+                    <div class="loading-state">
+                        <div class="loading-spinner"></div>
+                        <p>Chargement des stations...</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Aucune station trouvée
+            if (state.visibleStations.length === 0 && state.filteredStations.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="empty-state">
+                        <p style="font-size: 2rem; margin-bottom: 12px;">🔍</p>
+                        <p>Aucune station ne propose <strong>${state.selectedFuel}</strong> dans ce secteur.</p>
+                        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 8px;">
+                            Essayez un autre type de carburant.
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Aucune station visible sur la carte actuelle
+            if (state.visibleStations.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="empty-state">
+                        <p style="font-size: 2rem; margin-bottom: 12px;">🗺️</p>
+                        <p>Aucune station visible dans cette zone.</p>
+                        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 8px;">
+                            Déplacez ou dézoomez la carte pour voir plus de stations.
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Génération de la liste des stations visibles
+            const totalStations = state.visibleStations.length;
+            
+            listContainer.innerHTML = state.visibleStations.map((station, index) => {
+                // Détermination de la classe CSS selon le classement
+                let rankClass = '';
+                if (index < 3) {
+                    rankClass = 'top-cheap'; // Top 3 des moins chers
+                } else if (index >= totalStations - 3 && totalStations > 6) {
+                    rankClass = 'expensive'; // Top 3 des plus chers
+                }
+
+                // Vérification si les données sont périmées
+                const outdated = isOutdated(station.lastUpdate);
+                const daysAgo = getDaysAgo(station.lastUpdate);
+                if (outdated) {
+                    rankClass += ' outdated-data';
+                }
+
+                // Calcul de la distance approximative depuis le centre
+                const distance = calculateDistance(
+                    CONFIG.center.lat,
+                    CONFIG.center.lon,
+                    station.geom?.lat || 0,
+                    station.geom?.lon || 0
+                );
+
+                // Formatage de la date de mise à jour
+                const updateDate = formatDate(station.lastUpdate);
+
+                // Construction du nom de la station (utilisation de l'adresse si pas de nom)
+                const stationName = station.adresse || 'Station sans nom';
+
+                // Badge pour données périmées
+                const outdatedBadge = outdated 
+                    ? `<span class="outdated-badge">${daysAgo !== null ? daysAgo + 'j' : 'Ancien'}</span>` 
+                    : '';
+
+                return `
+                    <div class="station-card ${rankClass}" 
+                         onclick="focusStation(${station.geom?.lat}, ${station.geom?.lon})"
+                         data-id="${station.id}">
+                        <div class="station-header">
+                            <span class="station-rank">${index + 1}</span>
+                            <div class="station-info">
+                                <div class="station-name">${escapeHtml(stationName)}</div>
+                                <div class="station-address">${escapeHtml(station.ville || '')} ${station.cp || ''}</div>
+                            </div>
+                            <div class="station-price">
+                                ${station.currentPrice.toFixed(3)}
+                                <span class="price-unit">€/L</span>
+                            </div>
+                        </div>
+                        <div class="station-footer">
+                            <span class="station-distance">${distance.toFixed(1)} km</span>
+                            <span class="station-update ${outdated ? 'outdated' : ''}">MAJ: ${updateDate} ${outdatedBadge}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        /**
+         * ========================================
+         * MISE À JOUR DE LA CARTE
+         * ========================================
+         */
+        function updateMap() {
+            // Suppression des anciens marqueurs
+            state.markers.forEach(m => state.map.removeLayer(m.marker));
+            state.markers = [];
+
+            // Ajout des nouveaux marqueurs (sans couleur pour l'instant)
+            state.filteredStations.forEach((station) => {
+                if (!station.geom?.lat || !station.geom?.lon) return;
+
+                // Création du marqueur avec une classe par défaut
+                const icon = L.divIcon({
+                    className: '',
+                    html: `<div class="custom-marker">${station.currentPrice.toFixed(3)}€</div>`,
+                    iconSize: [80, 40],
+                    iconAnchor: [40, 40]
+                });
+
+                const marker = L.marker([station.geom.lat, station.geom.lon], { icon })
+                    .addTo(state.map);
+
+                // Contenu de la popup
+                const popupContent = `
+                    <div class="popup-content">
+                        <h3>${escapeHtml(station.adresse || 'Station')}</h3>
+                        <p>${escapeHtml(station.ville || '')} ${station.cp || ''}</p>
+                        <p class="popup-price">${state.selectedFuel}: ${station.currentPrice.toFixed(3)} €/L</p>
+                    </div>
+                `;
+
+                marker.bindPopup(popupContent);
+                // Stocker le marqueur avec sa station pour mise à jour des couleurs
+                state.markers.push({ marker, station });
+            });
+        }
+
+        /**
+         * ========================================
+         * MISE À JOUR DES STATISTIQUES
+         * ========================================
+         */
+        function updateStats() {
+            // Utiliser les stations visibles pour les stats
+            const prices = state.visibleStations.map(s => s.currentPrice);
+
+            if (prices.length === 0) {
+                document.getElementById('stat-min').textContent = '--';
+                document.getElementById('stat-avg').textContent = '--';
+                document.getElementById('stat-max').textContent = '--';
+                return;
+            }
+
+            const min = Math.min(...prices);
+            const max = Math.max(...prices);
+            const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+
+            document.getElementById('stat-min').textContent = min.toFixed(3);
+            document.getElementById('stat-avg').textContent = avg.toFixed(3);
+            document.getElementById('stat-max').textContent = max.toFixed(3);
+        }
+
+        /**
+         * ========================================
+         * FONCTIONS UTILITAIRES
+         * ========================================
+         */
+
+        /**
+         * Calcule la distance entre deux points GPS (formule de Haversine)
+         */
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Rayon de la Terre en km
+            const dLat = toRad(lat2 - lat1);
+            const dLon = toRad(lon2 - lon1);
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        function toRad(deg) {
+            return deg * (Math.PI / 180);
+        }
+
+        /**
+         * Formate une date ISO en format lisible
+         */
+        function formatDate(isoDate) {
+            if (!isoDate) return 'N/A';
+            try {
+                const date = new Date(isoDate);
+                return date.toLocaleDateString('fr-FR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch {
+                return 'N/A';
+            }
+        }
+
+        /**
+         * Vérifie si une date est trop ancienne (plus de 3 jours)
+         * @param {string} isoDate - Date au format ISO
+         * @returns {boolean} true si la donnée est périmée
+         */
+        function isOutdated(isoDate) {
+            if (!isoDate) return true; // Pas de date = considéré comme périmé
+            try {
+                const date = new Date(isoDate);
+                const now = new Date();
+                const diffInDays = (now - date) / (1000 * 60 * 60 * 24);
+                return diffInDays > 3; // Plus de 3 jours = périmé
+            } catch {
+                return true;
+            }
+        }
+
+        /**
+         * Retourne le nombre de jours depuis la dernière mise à jour
+         */
+        function getDaysAgo(isoDate) {
+            if (!isoDate) return null;
+            try {
+                const date = new Date(isoDate);
+                const now = new Date();
+                return Math.floor((now - date) / (1000 * 60 * 60 * 24));
+            } catch {
+                return null;
+            }
+        }
+
+        /**
+         * Échappe les caractères HTML pour éviter les injections XSS
+         */
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        /**
+         * Centre la carte sur une station spécifique
+         */
+        function focusStation(lat, lon) {
+            if (lat && lon) {
+                state.map.flyTo([lat, lon], 16, {
+                    duration: 0.8
+                });
+            }
+        }
+
+        /**
+         * Affiche un message d'erreur
+         */
+        function showError(message) {
+            const listContainer = document.getElementById('stations-list');
+            listContainer.innerHTML = `
+                <div class="error-state">
+                    <div class="error-icon">⚠️</div>
+                    <p><strong>Erreur de chargement</strong></p>
+                    <p style="font-size: 0.85rem; margin-top: 8px;">${escapeHtml(message)}</p>
+                    <button class="retry-btn" onclick="fetchStations()">Réessayer</button>
+                </div>
+            `;
+        }
+
+        /**
+         * ========================================
+         * GESTIONNAIRES D'ÉVÉNEMENTS
+         * ========================================
+         */
+
+        // Changement de type de carburant
+        document.getElementById('fuel-type').addEventListener('change', (e) => {
+            state.selectedFuel = e.target.value;
+            console.log(`⛽ Carburant sélectionné: ${state.selectedFuel}`);
+            filterStationsByFuel();
+        });
+
+        /**
+         * ========================================
+         * DÉMARRAGE DE L'APPLICATION
+         * ========================================
+         */
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 Démarrage de Fuel Pricer');
+            
+            // Initialisation de la carte
+            initMap();
+            
+            // Chargement des données
+            fetchStations();
+        });
+    </script>
+</body>
+</html>
