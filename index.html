@@ -359,6 +359,158 @@
         }
 
         /* ========================================
+           FAVORIS
+        ======================================== */
+        .favorite-btn {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 4px;
+            transition: var(--transition);
+            opacity: 0.5;
+        }
+
+        .favorite-btn:hover {
+            transform: scale(1.2);
+            opacity: 1;
+        }
+
+        .favorite-btn.active {
+            opacity: 1;
+        }
+
+        .station-card.is-favorite {
+            border-color: var(--warning);
+        }
+
+        .station-card.is-favorite::after {
+            content: "⭐";
+            position: absolute;
+            top: 8px;
+            right: 32px;
+            font-size: 0.9rem;
+        }
+
+        .favorites-filter {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            background-color: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .favorites-toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .favorites-toggle:hover {
+            border-color: var(--warning);
+            color: var(--warning);
+        }
+
+        .favorites-toggle.active {
+            background-color: rgba(245, 158, 11, 0.15);
+            border-color: var(--warning);
+            color: var(--warning);
+        }
+
+        .favorites-count {
+            background-color: var(--warning);
+            color: var(--bg-primary);
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 10px;
+        }
+
+        /* ========================================
+           BOUTONS NAVIGATION
+        ======================================== */
+        .station-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .nav-btn {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            text-decoration: none;
+        }
+
+        .nav-btn.google-maps {
+            background-color: #4285f4;
+            color: white;
+        }
+
+        .nav-btn.google-maps:hover {
+            background-color: #3367d6;
+        }
+
+        .nav-btn.waze {
+            background-color: #33ccff;
+            color: #000;
+        }
+
+        .nav-btn.waze:hover {
+            background-color: #00b8e6;
+        }
+
+        /* ========================================
+           TENDANCE PRIX
+        ======================================== */
+        .price-trend {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 4px;
+        }
+
+        .price-trend.up {
+            color: var(--danger);
+        }
+
+        .price-trend.down {
+            color: var(--success);
+        }
+
+        .price-trend.stable {
+            color: var(--text-secondary);
+        }
+
+        .trend-arrow {
+            font-size: 0.9rem;
+        }
+
+        .trend-value {
+            font-size: 0.65rem;
+        }
+
+        /* ========================================
            ETATS (Chargement, Erreur, Vide)
         ======================================== */
         .loading-state,
@@ -575,6 +727,13 @@
                 </div>
             </div>
 
+            <!-- Filtre favoris -->
+            <div class="favorites-filter">
+                <button class="favorites-toggle" id="favorites-toggle" onclick="toggleFavoritesFilter()">
+                    ⭐ Favoris <span class="favorites-count" id="favorites-count">0</span>
+                </button>
+            </div>
+
             <!-- Liste des stations -->
             <div class="stations-list" id="stations-list">
                 <div class="loading-state">
@@ -629,8 +788,153 @@
             selectedFuel: 'E10',    // Carburant sélectionné
             map: null,              // Instance de la carte Leaflet
             markers: [],            // Marqueurs sur la carte
-            isLoading: false        // État de chargement
+            isLoading: false,       // État de chargement
+            favorites: [],          // IDs des stations favorites
+            showOnlyFavorites: false, // Filtre favoris actif
+            priceHistory: {}        // Historique des prix pour tendances
         };
+
+        /**
+         * ========================================
+         * GESTION DES FAVORIS (localStorage)
+         * ========================================
+         */
+        function loadFavorites() {
+            try {
+                const saved = localStorage.getItem('fuel-pricer-favorites');
+                state.favorites = saved ? JSON.parse(saved) : [];
+                updateFavoritesCount();
+            } catch (e) {
+                console.error('Erreur chargement favoris:', e);
+                state.favorites = [];
+            }
+        }
+
+        function saveFavorites() {
+            try {
+                localStorage.setItem('fuel-pricer-favorites', JSON.stringify(state.favorites));
+                updateFavoritesCount();
+            } catch (e) {
+                console.error('Erreur sauvegarde favoris:', e);
+            }
+        }
+
+        function toggleFavorite(stationId, event) {
+            event.stopPropagation();
+            const index = state.favorites.indexOf(stationId);
+            if (index === -1) {
+                state.favorites.push(stationId);
+                console.log(`⭐ Station ${stationId} ajoutée aux favoris`);
+            } else {
+                state.favorites.splice(index, 1);
+                console.log(`💫 Station ${stationId} retirée des favoris`);
+            }
+            saveFavorites();
+            updateUI();
+        }
+
+        function isFavorite(stationId) {
+            return state.favorites.includes(stationId);
+        }
+
+        function updateFavoritesCount() {
+            const countEl = document.getElementById('favorites-count');
+            if (countEl) {
+                countEl.textContent = state.favorites.length;
+            }
+        }
+
+        function toggleFavoritesFilter() {
+            state.showOnlyFavorites = !state.showOnlyFavorites;
+            const toggleBtn = document.getElementById('favorites-toggle');
+            if (toggleBtn) {
+                toggleBtn.classList.toggle('active', state.showOnlyFavorites);
+            }
+            console.log(`🔍 Filtre favoris: ${state.showOnlyFavorites ? 'activé' : 'désactivé'}`);
+            updateVisibleStations();
+        }
+
+        /**
+         * ========================================
+         * GESTION HISTORIQUE PRIX (tendances)
+         * ========================================
+         */
+        function loadPriceHistory() {
+            try {
+                const saved = localStorage.getItem('fuel-pricer-price-history');
+                state.priceHistory = saved ? JSON.parse(saved) : {};
+            } catch (e) {
+                console.error('Erreur chargement historique:', e);
+                state.priceHistory = {};
+            }
+        }
+
+        function savePriceHistory() {
+            try {
+                // Nettoyer les entrées de plus de 7 jours
+                const now = Date.now();
+                const maxAge = 7 * 24 * 60 * 60 * 1000;
+                Object.keys(state.priceHistory).forEach(key => {
+                    const entry = state.priceHistory[key];
+                    if (now - entry.timestamp > maxAge) {
+                        delete state.priceHistory[key];
+                    }
+                });
+                localStorage.setItem('fuel-pricer-price-history', JSON.stringify(state.priceHistory));
+            } catch (e) {
+                console.error('Erreur sauvegarde historique:', e);
+            }
+        }
+
+        function updatePriceHistory(station) {
+            const key = `${station.id}-${state.selectedFuel}`;
+            const currentPrice = station.currentPrice;
+            const existing = state.priceHistory[key];
+            
+            if (!existing || existing.price !== currentPrice) {
+                state.priceHistory[key] = {
+                    previousPrice: existing ? existing.price : null,
+                    price: currentPrice,
+                    timestamp: Date.now()
+                };
+            }
+        }
+
+        function getPriceTrend(station) {
+            const key = `${station.id}-${state.selectedFuel}`;
+            const history = state.priceHistory[key];
+            
+            if (!history || history.previousPrice === null) {
+                return { trend: 'stable', diff: 0 };
+            }
+            
+            const diff = station.currentPrice - history.previousPrice;
+            const threshold = 0.001; // 0.1 centime
+            
+            if (diff > threshold) {
+                return { trend: 'up', diff: diff };
+            } else if (diff < -threshold) {
+                return { trend: 'down', diff: Math.abs(diff) };
+            }
+            return { trend: 'stable', diff: 0 };
+        }
+
+        /**
+         * ========================================
+         * LIENS NAVIGATION (Google Maps / Waze)
+         * ========================================
+         */
+        function openGoogleMaps(lat, lon, address, event) {
+            event.stopPropagation();
+            const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
+            window.open(url, '_blank');
+        }
+
+        function openWaze(lat, lon, event) {
+            event.stopPropagation();
+            const url = `https://waze.com/ul?ll=${lat},${lon}&navigate=yes`;
+            window.open(url, '_blank');
+        }
 
         /**
          * ========================================
@@ -808,10 +1112,17 @@
             const bounds = state.map.getBounds();
             
             // Filtrer les stations dans ces limites
-            state.visibleStations = state.filteredStations.filter(station => {
+            let filtered = state.filteredStations.filter(station => {
                 if (!station.geom?.lat || !station.geom?.lon) return false;
                 return bounds.contains([station.geom.lat, station.geom.lon]);
             });
+            
+            // Appliquer filtre favoris si actif
+            if (state.showOnlyFavorites) {
+                filtered = filtered.filter(station => isFavorite(station.id));
+            }
+            
+            state.visibleStations = filtered;
             
             console.log(`🗺️ ${state.visibleStations.length} stations visibles sur la carte`);
             
@@ -922,6 +1233,10 @@
             // Génération de la liste des stations visibles
             const totalStations = state.visibleStations.length;
             
+            // Mettre à jour l'historique des prix pour les tendances
+            state.visibleStations.forEach(station => updatePriceHistory(station));
+            savePriceHistory();
+            
             listContainer.innerHTML = state.visibleStations.map((station, index) => {
                 // Détermination de la classe CSS selon le classement
                 let rankClass = '';
@@ -929,6 +1244,12 @@
                     rankClass = 'top-cheap'; // Top 3 des moins chers
                 } else if (index >= totalStations - 3 && totalStations > 6) {
                     rankClass = 'expensive'; // Top 3 des plus chers
+                }
+
+                // Vérification si c'est un favori
+                const favorite = isFavorite(station.id);
+                if (favorite) {
+                    rankClass += ' is-favorite';
                 }
 
                 // Vérification si les données sont périmées
@@ -957,9 +1278,22 @@
                     ? `<span class="outdated-badge">${daysAgo !== null ? daysAgo + 'j' : 'Ancien'}</span>` 
                     : '';
 
+                // Tendance du prix
+                const { trend, diff } = getPriceTrend(station);
+                let trendHtml = '';
+                if (trend === 'up') {
+                    trendHtml = `<span class="price-trend up"><span class="trend-arrow">↑</span><span class="trend-value">+${diff.toFixed(3)}</span></span>`;
+                } else if (trend === 'down') {
+                    trendHtml = `<span class="price-trend down"><span class="trend-arrow">↓</span><span class="trend-value">-${diff.toFixed(3)}</span></span>`;
+                }
+
+                // Coordonnées pour la navigation
+                const lat = station.geom?.lat || 0;
+                const lon = station.geom?.lon || 0;
+
                 return `
                     <div class="station-card ${rankClass}" 
-                         onclick="focusStation(${station.geom?.lat}, ${station.geom?.lon})"
+                         onclick="focusStation(${lat}, ${lon})"
                          data-id="${station.id}">
                         <div class="station-header">
                             <span class="station-rank">${index + 1}</span>
@@ -967,14 +1301,28 @@
                                 <div class="station-name">${escapeHtml(stationName)}</div>
                                 <div class="station-address">${escapeHtml(station.ville || '')} ${station.cp || ''}</div>
                             </div>
+                            <button class="favorite-btn ${favorite ? 'active' : ''}" 
+                                    onclick="toggleFavorite('${station.id}', event)"
+                                    title="${favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}">
+                                ${favorite ? '⭐' : '☆'}
+                            </button>
                             <div class="station-price">
                                 ${station.currentPrice.toFixed(3)}
                                 <span class="price-unit">€/L</span>
+                                ${trendHtml}
                             </div>
                         </div>
                         <div class="station-footer">
                             <span class="station-distance">${distance.toFixed(1)} km</span>
                             <span class="station-update ${outdated ? 'outdated' : ''}">MAJ: ${updateDate} ${outdatedBadge}</span>
+                        </div>
+                        <div class="station-actions">
+                            <a class="nav-btn google-maps" onclick="openGoogleMaps(${lat}, ${lon}, '${escapeHtml(stationName)}', event)">
+                                🗺️ Google Maps
+                            </a>
+                            <a class="nav-btn waze" onclick="openWaze(${lat}, ${lon}, event)">
+                                🚗 Waze
+                            </a>
                         </div>
                     </div>
                 `;
@@ -1175,6 +1523,10 @@
          */
         document.addEventListener('DOMContentLoaded', () => {
             console.log('🚀 Démarrage de Fuel Pricer');
+            
+            // Chargement des favoris et historique depuis localStorage
+            loadFavorites();
+            loadPriceHistory();
             
             // Initialisation de la carte
             initMap();
